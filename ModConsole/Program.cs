@@ -14,7 +14,7 @@ using Modbus.Device;
 using OptionAttribute = coptions.OptionAttribute;
 
 
-[ApplicationInfo(Help = "This program does something useful.")]
+[ApplicationInfo(Help = "Example: ModConsole.exe -c com8 -a 1 -f 3 -s 2340 -q 2 -i ")]
 public class Options
 {
 	//	[Flag('s', "silent", Help = "Produce no output.")]
