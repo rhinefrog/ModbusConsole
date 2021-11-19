@@ -14,25 +14,9 @@ using Modbus.Device;
 using OptionAttribute = coptions.OptionAttribute;
 
 
-[ApplicationInfo(Help = "Example: ModConsole.exe -c com8 -a 1 -f 3 -s 2340 -q 2 -i ")]
+[ApplicationInfo(Help = "Example: ModScanner.exe -c com8")]
 public class Options
 {
-	//	[Flag('s', "silent", Help = "Produce no output.")]
-	//	public bool Silent;
-
-	//	[Option('n', "name", "NAME", Help = "Name of user.")]
-	//	public string Name
-	//	{
-	//		get { return _name; }
-	//		set
-	//		{
-	//			if (String.IsNullOrWhiteSpace(value))
-	//				throw new InvalidOptionValueException("Name must not be blank");
-	//			_name = value;
-	//		}
-	//	}
-	//	private string _name;
-
 	[Option('c', "comport", "COMPORT", Help = "Comport Windows \"COM1\" or Linux \"/dev/ttySx\" ")]
 	public string Comport
 	{
@@ -45,72 +29,6 @@ public class Options
 		}
 	}
 	private string _comport;
-
-	[Option('f', "function", "FUNCTION", Help = "Choose a function ")]
-	public string Mfunction
-	{
-		get { return _mfunction; }
-		set
-		{
-			if (String.IsNullOrWhiteSpace(value))
-				throw new InvalidOptionValueException("Comport must not be blank");
-			_mfunction = value;
-		}
-	}
-	private string _mfunction;
-
-	[Option('a', "address", "DEVICE_ID", Help = "Choose a device address ")]
-    public int Address
-    {
-        get { return _address; }
-        set
-        {
-            _address = value;
-        }
-    }
-    private int _address;
-
-    [Option('s', "saddress", "STARTADDRESS", Help = "Choose a start address ")]
-	public string Saddress
-	{
-		get { return _saddress; }
-		set
-		{
-			if (String.IsNullOrWhiteSpace(value))
-				throw new InvalidOptionValueException("Comport must not be blank");
-			_saddress = value;
-		}
-	}
-	private string _saddress;
-
-	[Option('q', "qaddresses", "QUANTYADDRESSES", Help = "Quantity of addresses")]
-	public string Qtyaddresses
-	{
-		get { return _qtyaddresses; }
-		set
-		{
-			if (String.IsNullOrWhiteSpace(value))
-				throw new InvalidOptionValueException("Comport must not be blank");
-			_qtyaddresses = value;
-		}
-	}
-	private string _qtyaddresses;
-
-	[Flag('i', "ieee754", Help = "If IEEE754 required -i")]
-	public bool Ieee754;
-
-    [Option('w', "write", "WRITE", Help = "Value write")]
-    public string DPValue
-    {
-        get { return _dpvalue; }
-        set
-        {
-            if (String.IsNullOrWhiteSpace(value))
-                throw new InvalidOptionValueException("Comport must not be blank");
-            _dpvalue = value;
-        }
-    }
-    private string _dpvalue;
 }
 
 namespace ModConsole
@@ -123,16 +41,15 @@ namespace ModConsole
 			{
                 SerialPort _serialPort;
                 IModbusSerialMaster master;
-                byte slaveAddress = 1;
                 _serialPort = new SerialPort();
 
 				Options opt = CliParser.Parse<Options>(args);
-				Console.WriteLine("Device-ID: "+opt.Address);
-				Console.WriteLine("Function: "+opt.Mfunction);
-				Console.WriteLine("Start DP: "+opt.Saddress);
-				Console.WriteLine("Qty Of DP: "+opt.Qtyaddresses);
-                Console.WriteLine("DP-Value: " + opt.DPValue);
-                Console.WriteLine("IEEE754: "+opt.Ieee754);
+//				Console.WriteLine("Device-ID: "+opt.Address);
+//				Console.WriteLine("Function: "+opt.Mfunction);
+//				Console.WriteLine("Start DP: "+opt.Saddress);
+//				Console.WriteLine("Qty Of DP: "+opt.Qtyaddresses);
+//                Console.WriteLine("DP-Value: " + opt.DPValue);
+//                Console.WriteLine("IEEE754: "+opt.Ieee754);
 				//				Console.WriteLine(opt.OutputFile);
 				Console.WriteLine("Comport: "+opt.Comport);
 
@@ -153,55 +70,174 @@ namespace ModConsole
                 master.Transport.ReadTimeout = 1000;
                 master.Transport.WriteTimeout = 1000;
 
-                slaveAddress = Convert.ToByte(opt.Address);
-
-                if (opt.Mfunction == "1")
+                //                bool[] scanUnits;
+                //                for(int i = 1; i < 32; i++)
+                //                {
+                //                    scanUnits = master.ReadCoils(slaveAddress, Convert.ToUInt16(i), Convert.ToUInt16(1013));
+                //                    Console.WriteLine(scanUnits);
+                //                }
+                int next = 0;
+                string[] unitTyp = new string[33];
+                string[] controllerTyp = new string[33];
+                string[] controllerswversion = new string[33];
+                ushort[] results;
+                for(int i = 1; i < 32; i++)
+                {// controller typ
+                    try
+                    {
+                        results = master.ReadHoldingRegisters(Convert.ToByte(i), Convert.ToUInt16(0), Convert.ToUInt16(1));
+                        var wert = FromHexString(Convert.ToString((int)results[0])); 
+                        Console.WriteLine("Wert: " + wert);
+                        if (wert == 0) controllerTyp[i]  = "unknown";
+                        if (wert == 1) controllerTyp[i]  = "C4000";
+                        if (wert == 2) controllerTyp[i]  = "C1001";
+                        if (wert == 3) controllerTyp[i]  = "C1002";
+                        if (wert == 4) controllerTyp[i]  = "C5000";
+                        if (wert == 5) controllerTyp[i]  = "C6000";
+                        if (wert == 6) controllerTyp[i]  = "C1010";
+                        if (wert == 7) controllerTyp[i]  = "C7000IOC";
+                        if (wert == 8) controllerTyp[i]  = "C7000AT";
+                        if (wert == 9) controllerTyp[i]  = "C7000PT";
+                        if (wert == 10) controllerTyp[i] = "C5MSC";
+                        if (wert == 11) controllerTyp[i] = "C7000PT2";
+                        if (wert == 12) controllerTyp[i] = "C2020";
+                        if (wert == 13) controllerTyp[i] = "C100";
+                        if (wert == 14) controllerTyp[i] = "C102"; 
+                        if (wert == 15) controllerTyp[i] = "C103"; 
+                        if (wert == 16) controllerTyp[i] = "C7000TP";
+                        Console.WriteLine("controllerTyp :" + controllerTyp);
+                        Console.WriteLine("results :" + results);
+                        Thread.Sleep(50);
+                    }
+                    catch (Exception e)
+                    {
+                        // unknown options etc...
+                        Console.Error.WriteLine("Fatal Error: " + e.Message);
+                        return 1;
+                    }
+                    if (i == 32) next = 1;
+                }
+                // unit typ
+                if(next == 1)
                 {
-                    bool[] results = master.ReadCoils(slaveAddress, Convert.ToUInt16(opt.Saddress), Convert.ToUInt16(opt.Qtyaddresses));
-                    Console.WriteLine(results);
-                }
+                    for (int i = 1; i < 32; i++)
+                    {// controller typ
+                        try
+                        {
+                            results = master.ReadHoldingRegisters(Convert.ToByte(i), Convert.ToUInt16(2), Convert.ToUInt16(1));
+                            var wert = FromHexString(Convert.ToString((int)results[0])); 
+                            Console.WriteLine("Wert: " + wert);
+                            if (wert == 0)  unitTyp[i] = "MC";
+                            if (wert == 1)  unitTyp[i] = "DX";
+                            if (wert == 2)  unitTyp[i] = "CW";
+                            if (wert == 3)  unitTyp[i] = "CH";
+                            if (wert == 4)  unitTyp[i] = "ECO-COOL";
+                            if (wert == 5)  unitTyp[i] = "MSC";
+                            if (wert == 6)  unitTyp[i] = "GE1";
+                            if (wert == 7)  unitTyp[i] = "GE2";
+                            if (wert == 8)  unitTyp[i] = "Dualfluid";
+                            if (wert == 9)  unitTyp[i] = "CW2";
+                            if (wert == 10) unitTyp[i] = "CMD";
+                            if (wert == 11) unitTyp[i] = "CHP";
+                            if (wert == 12) unitTyp[i] = "FAU";
+                            if (wert == 13) unitTyp[i] = "CPP";
+                            if (wert == 14) unitTyp[i] = "Predator";
+                            if (wert == 15) unitTyp[i] = "Prodigy";
+                            if (wert == 16) unitTyp[i] = "ENS";
+                            if (wert == 17) unitTyp[i] = "CyberRow A";
+                            if (wert == 18) unitTyp[i] = "CyberRow CW";
+                            if (wert == 19) unitTyp[i] = "CyberRow G";
+                            if (wert == 20) unitTyp[i] = "EC-Tower";
+                            if (wert == 21) unitTyp[i] = "Explorer";
+                            if (wert == 255) unitTyp[i] = "unknown";
 
-                if (opt.Mfunction == "2") {  
-                    bool[] results = master.ReadInputs(slaveAddress, Convert.ToUInt16(opt.Saddress), Convert.ToUInt16(opt.Qtyaddresses));
-                    Console.WriteLine(results);
+                            Console.WriteLine("Unittyp :" + unitTyp);
+                            Console.WriteLine("results :" + results);
+                            Thread.Sleep(50);
+                        }
+                            catch (Exception e)
+                        {
+                            // unknown options etc...
+                            Console.Error.WriteLine("Fatal Error: " + e.Message);
+                            return 1;
+                        }
+                        if (i == 32) next = 2;
+                    }
                 }
-
-                if(opt.Mfunction == "3")
+                // sw version
+                if (next == 2)
                 {
-                    ushort[] results = master.ReadHoldingRegisters(slaveAddress, Convert.ToUInt16(opt.Saddress), Convert.ToUInt16(opt.Qtyaddresses));
-                    decimal temp = results[0];
-                    temp /= 10;
-                    Console.WriteLine(results);
+                    for (int i = 1; i < 32; i++)
+                    {// controller typ
+                        try
+                        {
+                            results = master.ReadHoldingRegisters(Convert.ToByte(i), Convert.ToUInt16(6), Convert.ToUInt16(1));
+                            var wert = FromHexString(Convert.ToString((int)results[0])); 
+                            Console.WriteLine("Wert: " + wert);
+                            controllerswversion[i] = wert.ToString();
+                            Console.WriteLine("SWVersion :" + controllerswversion);
+                            Console.WriteLine("results :" + results);
+                            Thread.Sleep(50);
+                        }
+                        catch (Exception e)
+                        {
+                            // unknown options etc...
+                            Console.Error.WriteLine("Fatal Error: " + e.Message);
+                            return 1;
+                        }
+                        if (i == 32) next = 3;
+                    }
                 }
-
-                if (opt.Mfunction == "4")
+                // bus id
+                string[] busid = new string[33];
+                if (next == 3)
                 {
-                    ushort[] results = master.ReadInputRegisters(slaveAddress, Convert.ToUInt16(opt.Saddress), Convert.ToUInt16(opt.Qtyaddresses));
-                    decimal temp = results[0];
-                    temp /= 10;
-                    Console.WriteLine(results);
+                    for (int i = 1; i < 32; i++)
+                    {// busid
+                        try
+                        {
+                            results = master.ReadHoldingRegisters(Convert.ToByte(i), Convert.ToUInt16(10), Convert.ToUInt16(1));
+                            var wert = FromHexString(Convert.ToString((int)results[0])); 
+                            Console.WriteLine("Wert: " + wert);
+                            busid[i] = wert.ToString();
+                            Console.WriteLine("BusID :" + busid);
+                            Console.WriteLine("results :" + results);
+                            Thread.Sleep(50);
+                        }
+                        catch (Exception e)
+                        {
+                            // unknown options etc...
+                            Console.Error.WriteLine("Fatal Error: " + e.Message);
+                            return 1;
+                        }
+                        if (i == 32) next = 4;
+                    }
                 }
-
-                if (opt.Mfunction == "5")
+                // glob id
+                string[] globid = new string[33];
+                if (next == 4)
                 {
-                    master.WriteSingleCoil(slaveAddress, Convert.ToUInt16(opt.Saddress), Convert.ToBoolean(opt.DPValue));
+                    for (int i = 1; i < 32; i++)
+                    {// busid
+                        try
+                        {
+                            results = master.ReadHoldingRegisters(Convert.ToByte(i), Convert.ToUInt16(12), Convert.ToUInt16(1));
+                            var wert = FromHexString(Convert.ToString((int)results[0])); 
+                            Console.WriteLine("Wert: " + wert);
+                            globid[i] = wert.ToString();
+                            Console.WriteLine("GlobID :" + globid);
+                            Console.WriteLine("results :" + results);
+                            Thread.Sleep(50);
+                        }
+                        catch (Exception e)
+                        {
+                            // unknown options etc...
+                            Console.Error.WriteLine("Fatal Error: " + e.Message);
+                            return 1;
+                        }
+                        if (i == 32) next = 5;
+                    }
                 }
-
-                if (opt.Mfunction == "6")
-                {
-                    master.WriteSingleRegister(slaveAddress, Convert.ToUInt16(opt.Saddress), Convert.ToUInt16(opt.DPValue));
-                }
-
-                if (opt.Mfunction == "16")
-                {
-					var tempo = ToHexString(float.Parse(opt.DPValue));
-					ushort[] registers = new ushort[] { 1, 2 };
-                    registers[0] = Convert.ToUInt16(tempo.Substring(2, 4), 16);
-                    registers[1] = Convert.ToUInt16(tempo.Substring(6, 4), 16);
-                    Console.WriteLine(registers);
-                    master.WriteMultipleRegisters(slaveAddress, Convert.ToUInt16(opt.Saddress), registers);
-                }
-
                 _serialPort.Close();
                 _serialPort.Dispose();
                 master.Dispose();
