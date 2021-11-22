@@ -15,85 +15,31 @@ using Modbus.Device;
 using OptionAttribute = coptions.OptionAttribute;
 
 
-[ApplicationInfo(Help = "Example: ModConsole.exe -c com8 -a 1 -f 3 -s 2340 -q 4 -i ")]
+[ApplicationInfo(Help = "Example: ModbusScan.exe -c com8 -d ")]
 public class Options
 {
-	[Option('c', "comport", "COMPORT", Help = "Comport Windows \"COM1\" or Linux \"/dev/ttySx\" ")]
-	public string Comport
-	{
-		get { return _comport; }
-		set
-		{
-			if (String.IsNullOrWhiteSpace(value))
-				throw new InvalidOptionValueException("Comport must not be blank");
-			_comport = value;
-		}
-	}
-	private string _comport;
-
-	[Option('f', "function", "FUNCTION", Help = "Choose a function ")]
-	public string Mfunction
-	{
-		get { return _mfunction; }
-		set
-		{
-			_mfunction = value;
-		}
-	}
-	private string _mfunction;
-
-	[Option('a', "address", "DEVICE_ID", Help = "Choose a device address ")]
-    public int Address
+    [Option('c', "comport", "COMPORT", Help = "Comport Windows \"COM1\" or Linux \"/dev/ttySx\" ")]
+    public string Comport
     {
-        get { return _address; }
+        get { return _comport; }
         set
         {
-            _address = value;
+            if (String.IsNullOrWhiteSpace(value))
+                throw new InvalidOptionValueException("Comport must not be blank");
+            _comport = value;
         }
     }
-    private int _address;
+    private string _comport;
 
-    [Option('s', "saddress", "STARTADDRESS", Help = "Choose a start address ")]
-	public int Saddress
-	{
-		get { return _saddress; }
-		set
-		{
-			_saddress = value;
-		}
-	}
-	private int _saddress;
-
-	[Option('q', "qaddresses", "QUANTYADDRESSES", Help = "Quantity of addresses")]
-	public int Qtyaddresses
-	{
-		get { return _qtyaddresses; }
-		set
-		{
-			_qtyaddresses = value;
-		}
-	}
-	private int _qtyaddresses;
-
-	[Flag('i', "ieee754", Help = "If IEEE754 required -i")]
-	public bool Ieee754;
-
-    [Flag('d', "debug", Help = "If Debug required -d")]
-    public bool DPdebug;
-
-    [Option('w', "write", "WRITE", Help = "Value write")]
-    public int DPValue
-    {
-        get { return _dpvalue; }
-        set
-        {
-            _dpvalue = value;
-        }
-    }
-    private int _dpvalue;
+    /*
+    [Option('d', "Debug", "DEBUG" , Help = "Debugginh on/off")]
+    public bool debug 
+    { 
+        get; set; 
+    }*/
 }
 
-namespace ModConsole
+namespace ModbusScan
 {
     class Program
     {
@@ -102,157 +48,61 @@ namespace ModConsole
             try
             {
                 Options opt = CliParser.Parse<Options>(args);
+                int datapoint = 0;
+
+                int[] unitExist = new int[32]; // 248
+                string[] controllerType = new string[32];
+
                 ModbusSerialMaster _modbusMaster;
                 SerialPort _serialPort;
                 _serialPort = new SerialPort(opt.Comport, 9600, Parity.None, 8, StopBits.One);
                 _serialPort.Open();
 
                 _modbusMaster = ModbusSerialMaster.CreateRtu(_serialPort);
-                _modbusMaster.Transport.ReadTimeout = 500;
-                _modbusMaster.Transport.WriteTimeout = 500;
-                _modbusMaster.Transport.Retries = 0;
-                try
+                _modbusMaster.Transport.ReadTimeout = 1000;
+                _modbusMaster.Transport.WriteTimeout = 1000;
+                _modbusMaster.Transport.Retries = 3;
+
+                for(int i=0; i < 32; i++) //248
                 {
-
-                    if (opt.Mfunction == "1")
+                    try
                     {
-                        // ReadCoils = 0x01,                   // FC01
-                        try
+                         // ReadHoldingRegisters = 0x03,        // FC03
+                         ushort[] result = _modbusMaster.ReadHoldingRegisters(Convert.ToByte(i), (ushort)datapoint, 2);
+                         var f = FromHexString(result[0].ToString("X4") + result[1].ToString("X4"));
+                         Console.WriteLine("Glob-ID: " + i.ToString() + " Controller-Typ: " + ControllerType(f.ToString()) + "\n");
+
+                        unitExist[i] = i;
+                        controllerType[i] = ControllerType(f.ToString());
+                    }
+                    catch (Exception ex)
+                    {
+                        //The server return error code.You can get the function code and exception code.
+                        if (ex.Message.Equals("The operation has timed out."))
                         {
-                            bool[] result = _modbusMaster.ReadCoils(Convert.ToByte(opt.Address), (ushort)opt.Saddress, (ushort)opt.Qtyaddresses);
-                            if (result[0])
-                            {
-                                Console.WriteLine("true");
-                            }
-                            else
-                            {
-                                Console.WriteLine("false");
-                            }
-                            if (opt.DPdebug == true) Console.WriteLine("Debug: " + result);
+                            Console.WriteLine("Address: "+i+" existiert nöd\n");
+                            unitExist[i] = 999;
+                            controllerType[i] = "unknown";
                         }
-                        catch (Exception ex)
+                        else
                         {
                             Console.WriteLine(ex.Message);
-                        }
+                         }                 
                     }
-
-                    if (opt.Mfunction == "2")
-                    {
-                        // ReadDiscreteInputs = 0x02,          // FC02
-                        try
-                        {
-                            bool[] result = _modbusMaster.ReadInputs(Convert.ToByte(opt.Address), (ushort)opt.Saddress, (ushort)opt.Qtyaddresses);
-                            if (result[0])
-                            {
-                                Console.WriteLine("true");
-                            }
-                            else
-                            {
-                                Console.WriteLine("false");
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine(ex.Message);
-                        }
-                    }
-
-                    if (opt.Mfunction == "3")
-                    {
-                        // ReadHoldingRegisters = 0x03,        // FC03
-                        try
-                        {
-                            ushort[] result = _modbusMaster.ReadHoldingRegisters(Convert.ToByte(opt.Address), (ushort)opt.Saddress, (ushort)opt.Qtyaddresses);
-                            var f = FromHexString(result[0].ToString("X4") + result[1].ToString("X4"));
-                            if (opt.Ieee754 == true) Console.WriteLine(f.ToString());
-                            if (opt.DPdebug == true) Console.WriteLine(result[0].ToString("X4") + result[1].ToString("X4"));
-                            if (!opt.Ieee754) Console.WriteLine(result[0].ToString() + result[1].ToString());
-                        }
-                        catch (Exception ex)
-                        {
-                            //The server return error code.You can get the function code and exception code.
-                            if (ex.Message.Equals("The operation has timed out."))
-                            {
-                                Console.WriteLine("Address:"+opt.Address+" existiert nöd");
-
-                            }
-                            else
-                            {
-                                Console.WriteLine(ex.Message);
-                            }
-                        }
-
-                    }
-
-                    if (opt.Mfunction == "4")
-                    {
-                        // ReadInputRegisters = 0x04,          // FC04
-                        try
-                        {
-                            ushort[] result = _modbusMaster.ReadInputRegisters(Convert.ToByte(opt.Address), (ushort)opt.Saddress, (ushort)opt.Qtyaddresses);
-                            var f = FromHexString(result[0].ToString("X4") + result[1].ToString("X4"));
-                            if (opt.Ieee754 == true) Console.WriteLine(f);
-                            if (opt.DPdebug == true) Console.WriteLine(result[0].ToString("X4") + result[1].ToString("X4"));
-                            if (!opt.Ieee754) Console.WriteLine(result[0].ToString() + result[1].ToString());
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine(ex.Message);
-                        }
-                    }
-
-                    if (opt.Mfunction == "5")
-                    {
-                        // WriteSingleCoil = 0x05,             // FC0
-                        try
-                        {
-                            bool wert = false;
-                            if (opt.DPValue == 1) wert = true;
-                            if (opt.DPValue == 0) wert = false;
-                            _modbusMaster.WriteSingleCoil(Convert.ToByte(opt.Address), (ushort)opt.Saddress, wert);
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine(ex.Message);
-                        }
-                    }
-
-                    if (opt.Mfunction == "16")
-                    {
-                        // WriteMultipleRegisters = 0x10,      // FC16
-                        int h = opt.DPValue;
-                        float hilf = (float)h;
-                        hilf = hilf / 10;
-                        var tempo = ToHexString(hilf);
-                        //Console.WriteLine(hilf);
-                        //Console.WriteLine(tempo.ToString());
-                        if (opt.DPdebug == true) Console.WriteLine(tempo.Substring(2, 8));
-                        ushort[] registers = new ushort[2] { 1, 2 };
-                        registers[0] = (ushort)Convert.ToInt16(tempo.Substring(2, 4), 16);
-                        registers[1] = (ushort)Convert.ToInt16(tempo.Substring(2 + 4, 4), 16);
-                        _modbusMaster.WriteMultipleRegisters(Convert.ToByte(opt.Address), (ushort)opt.Saddress, registers);
-                    }
-
                 }
-                catch (Exception ex)
-                {
-                    Console.WriteLine(ex.Message);
-                }
-                //                client.Close();
-                _modbusMaster.Dispose();
-                _modbusMaster = null;
 
-                _serialPort.Close();
-                _serialPort.Dispose();
-                _serialPort = null;
+             _modbusMaster.Dispose();
+             _modbusMaster = null;
+             _serialPort.Close();
+             _serialPort.Dispose();
+             _serialPort = null;
 
-                return 0;
+             return 0;
             }
             catch (CliParserExit)
             {
                 // --help
                 return 0;
-
             }
             catch (Exception e)
             {
@@ -271,6 +121,67 @@ namespace ModConsole
                 var i = Convert.ToInt32(s, 16);
                 var bytes = BitConverter.GetBytes(i);
                 return BitConverter.ToSingle(bytes, 0);
+            }
+        string ControllerType(string num)
+        {
+            string controllerTyp ="";
+            int nummer = Convert.ToInt32(num);
+
+            switch (nummer)
+            {
+                case 0:
+                    controllerTyp = "unknown";
+                    break;
+                case 1:
+                    controllerTyp = "C4000";
+                    break;
+                case 2:
+                    controllerTyp = "C1001";
+                    break;
+                case 3:
+                    controllerTyp = "C1002";
+                    break;
+                case 4:
+                    controllerTyp = "C5000";
+                    break;
+                case 5:
+                    controllerTyp = "C6000";
+                    break;
+                case 6:
+                    controllerTyp = "C1010";
+                    break;
+                case 7:
+                    controllerTyp = "C7000IOC";
+                    break;
+                case 8:
+                    controllerTyp = "C7000AT";
+                    break;
+                case 9:
+                    controllerTyp = "C7000PT";
+                    break;
+                case 10:
+                    controllerTyp = "C5MSC";
+                    break;
+                case 11:
+                    controllerTyp = "C7000PT2";
+                    break;
+                case 12:
+                    controllerTyp = "C2020";
+                    break;
+                case 13:
+                    controllerTyp = "C100";
+                    break;
+                case 14:
+                    controllerTyp = "C102";
+                    break;
+                case 15:
+                    controllerTyp = "C103";
+                    break;
+                case 16:
+                    controllerTyp = "C7000TP";
+                    break;
+            }
+            return controllerTyp;
             }
         }
     }
