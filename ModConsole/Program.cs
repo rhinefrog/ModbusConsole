@@ -11,29 +11,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommandLine;
 using coptions;
-using FluentModbus;
+using Modbus.Device;
 using OptionAttribute = coptions.OptionAttribute;
 
 
 [ApplicationInfo(Help = "Example: ModConsole.exe -c com8 -a 1 -f 3 -s 2340 -q 4 -i ")]
 public class Options
 {
-	//	[Flag('s', "silent", Help = "Produce no output.")]
-	//	public bool Silent;
-
-	//	[Option('n', "name", "NAME", Help = "Name of user.")]
-	//	public string Name
-	//	{
-	//		get { return _name; }
-	//		set
-	//		{
-	//			if (String.IsNullOrWhiteSpace(value))
-	//				throw new InvalidOptionValueException("Name must not be blank");
-	//			_name = value;
-	//		}
-	//	}
-	//	private string _name;
-
 	[Option('c', "comport", "COMPORT", Help = "Comport Windows \"COM1\" or Linux \"/dev/ttySx\" ")]
 	public string Comport
 	{
@@ -94,8 +78,11 @@ public class Options
 	[Flag('i', "ieee754", Help = "If IEEE754 required -i")]
 	public bool Ieee754;
 
+    [Flag('d', "debug", Help = "If Debug required -d")]
+    public bool DPdebug;
+
     [Option('w', "write", "WRITE", Help = "Value write")]
-    public string DPValue
+    public int DPValue
     {
         get { return _dpvalue; }
         set
@@ -103,160 +90,147 @@ public class Options
             _dpvalue = value;
         }
     }
-    private string _dpvalue;
+    private int _dpvalue;
 }
 
 namespace ModConsole
 {
-	class Program
-	{
-		static int Main(string[] args)
-		{
+    class Program
+    {
+        static int Main(string[] args)
+        {
             try
-			{
-				Options opt = CliParser.Parse<Options>(args);
-                var client = new ModbusRtuClient()
-                {
-                    BaudRate = 9600,
-                    Handshake = Handshake.None,
-                    Parity = Parity.None,
-                    StopBits = StopBits.One,
-                    ReadTimeout = 1000,
-                    WriteTimeout = 1000
-                };
-                var clientPort = opt.Comport;
-                    
-                Span<byte> data;
+            {
+                Options opt = CliParser.Parse<Options>(args);
+                ModbusSerialMaster _modbusMaster;
+                SerialPort _serialPort;
+                _serialPort = new SerialPort(opt.Comport, 9600, Parity.None, 8, StopBits.One);
+                _serialPort.Open();
 
-                var sleepTime = TimeSpan.FromMilliseconds(100);
-                if (!client.IsConnected)                client.Connect(clientPort);
+                _modbusMaster = ModbusSerialMaster.CreateRtu(_serialPort);
+                _modbusMaster.Transport.ReadTimeout = 500;
+                _modbusMaster.Transport.WriteTimeout = 500;
+                _modbusMaster.Transport.Retries = 0;
                 try
                 {
 
-                    // ReadHoldingRegisters = 0x03,        // FC03
-                    //                        data = client.ReadHoldingRegisters<byte>(unitIdentifier, startingAddress, opt.Qtyaddresses);
-                    //                        logger.LogInformation("FC03 - ReadHoldingRegisters: Done");
-                    //                        Thread.Sleep(sleepTime);
-
-                    // WriteMultipleRegisters = 0x10,      // FC16
-                    //                        client.WriteMultipleRegisters(unitIdentifier, startingAddress, new byte[] { 10, 00, 20, 00, 30, 00, 255, 00, 255, 01 });
-                    //                        logger.LogInformation("FC16 - WriteMultipleRegisters: Done");
-                    //                        Thread.Sleep(sleepTime);
-
-                    // ReadCoils = 0x01,                   // FC01
-                    //                        data = client.ReadCoils(unitIdentifier, startingAddress, opt.Qtyaddresses);
-                    //                        logger.LogInformation("FC01 - ReadCoils: Done");
-                    //                        Thread.Sleep(sleepTime);
-
-                    // ReadDiscreteInputs = 0x02,          // FC02
-                    //                        data = client.ReadDiscreteInputs(unitIdentifier, startingAddress, 10);
-                    //                        logger.LogInformation("FC02 - ReadDiscreteInputs: Done");
-                    //                        Thread.Sleep(sleepTime);
-
-                    // ReadInputRegisters = 0x04,          // FC04
-                    //                        data = client.ReadInputRegisters<byte>(unitIdentifier, startingAddress, 10);
-                    //                        logger.LogInformation("FC04 - ReadInputRegisters: Done");
-                    //                        Thread.Sleep(sleepTime);
-
-                    // WriteSingleCoil = 0x05,             // FC05
-                    //                        client.WriteSingleCoil(unitIdentifier, registerAddress, true);
-                    //                        logger.LogInformation("FC05 - WriteSingleCoil: Done");
-                    //                        Thread.Sleep(sleepTime);
-
-                    // WriteSingleRegister = 0x06,         // FC06
-                    //                        client.WriteSingleRegister(unitIdentifier, registerAddress, 127);
-                    //                        logger.LogInformation("FC06 - WriteSingleRegister: Done");
-                    //                    }
                     if (opt.Mfunction == "1")
                     {
                         // ReadCoils = 0x01,                   // FC01
-                        data = client.ReadCoils(opt.Address, opt.Saddress, opt.Qtyaddresses);
-                        var newData = data.ToArray();
-                        string hilf = FromHexString(ByteArrayToString(newData)).ToString();
-                        if (hilf == "0")
+                        try
                         {
-                            Console.WriteLine("false");
+                            bool[] result = _modbusMaster.ReadCoils(Convert.ToByte(opt.Address), (ushort)opt.Saddress, (ushort)opt.Qtyaddresses);
+                            if (result[0])
+                            {
+                                Console.WriteLine("true");
+                            }
+                            else
+                            {
+                                Console.WriteLine("false");
+                            }
+                            if (opt.DPdebug == true) Console.WriteLine("Debug: " + result);
                         }
-                        else
+                        catch (Exception ex)
                         {
-                            Console.WriteLine("true");
+                            Console.WriteLine(ex.Message);
                         }
-                        Console.WriteLine("FC01 - ReadCoils: Done");
-                        //                        Thread.Sleep(sleepTime);
                     }
 
-                    if (opt.Mfunction == "2") {  
+                    if (opt.Mfunction == "2")
+                    {
                         // ReadDiscreteInputs = 0x02,          // FC02
-                        data = client.ReadDiscreteInputs(opt.Address, opt.Saddress, opt.Qtyaddresses);
-                        var newData = data.ToArray();
-                        string hilf = FromHexString(ByteArrayToString(newData)).ToString();
-                        if (hilf == "0")
+                        try
                         {
-                            Console.WriteLine("false");
+                            bool[] result = _modbusMaster.ReadInputs(Convert.ToByte(opt.Address), (ushort)opt.Saddress, (ushort)opt.Qtyaddresses);
+                            if (result[0])
+                            {
+                                Console.WriteLine("true");
+                            }
+                            else
+                            {
+                                Console.WriteLine("false");
+                            }
                         }
-                        else
+                        catch (Exception ex)
                         {
-                            Console.WriteLine("true");
+                            Console.WriteLine(ex.Message);
                         }
-                        Console.WriteLine("FC01 - ReadCoils: Done");
-                        //                        Thread.Sleep(sleepTime);
                     }
 
                     if (opt.Mfunction == "3")
-                {
+                    {
                         // ReadHoldingRegisters = 0x03,        // FC03
-                        data = client.ReadHoldingRegisters<byte>(opt.Address, opt.Saddress, opt.Qtyaddresses);
-                        var newData = data.ToArray();
-                        Console.WriteLine(ByteArrayToString(newData));
-                        Console.WriteLine(FromHexString(ByteArrayToString(newData)));
-                        Console.WriteLine("FC03 - ReadHoldingRegisters: Done");
-                }
-
-                if (opt.Mfunction == "4")
-                {
-                        // ReadInputRegisters = 0x04,          // FC04
-                        data = client.ReadInputRegisters<byte>(opt.Address, opt.Saddress, opt.Qtyaddresses);
-                        //                        Thread.Sleep(sleepTime);
-                        var newData = data.ToArray();
-                        if (opt.Ieee754 == true)
+                        try
                         {
-                            Console.WriteLine(FromHexString(ByteArrayToString(newData)));
-                        }else
-                        {
-                            Console.WriteLine(ByteArrayToString(newData));
+                            ushort[] result = _modbusMaster.ReadHoldingRegisters(Convert.ToByte(opt.Address), (ushort)opt.Saddress, (ushort)opt.Qtyaddresses);
+                            var f = FromHexString(result[0].ToString("X4") + result[1].ToString("X4"));
+                            if (opt.Ieee754 == true) Console.WriteLine(f.ToString());
+                            if (opt.DPdebug == true) Console.WriteLine(result[0].ToString("X4") + result[1].ToString("X4"));
+                            if (!opt.Ieee754) Console.WriteLine(result[0].ToString() + result[1].ToString());
                         }
-                        Console.WriteLine("FC03 - ReadHoldingRegisters: Done");
-                }
+                        catch (Exception ex)
+                        {
+                            //The server return error code.You can get the function code and exception code.
+                            if (ex.Message.Equals("The operation has timed out."))
+                            {
+                                Console.WriteLine("Address:"+opt.Address+" existiert nöd");
 
-                if (opt.Mfunction == "5")
-                {
-                     // WriteSingleCoil = 0x05,             // FC0
-                     client.WriteSingleCoil(opt.Address, opt.Saddress, Convert.ToBoolean(opt.DPValue));
-                        //                        logger.LogInformation("FC05 - WriteSingleCoil: Done");
-                        //                        Thread.Sleep(sleepTime);
-                        Console.WriteLine("FC05 - WriteSingleCoil: Done");
+                            }
+                            else
+                            {
+                                Console.WriteLine(ex.Message);
+                            }
+                        }
+
+                    }
+
+                    if (opt.Mfunction == "4")
+                    {
+                        // ReadInputRegisters = 0x04,          // FC04
+                        try
+                        {
+                            ushort[] result = _modbusMaster.ReadInputRegisters(Convert.ToByte(opt.Address), (ushort)opt.Saddress, (ushort)opt.Qtyaddresses);
+                            var f = FromHexString(result[0].ToString("X4") + result[1].ToString("X4"));
+                            if (opt.Ieee754 == true) Console.WriteLine(f);
+                            if (opt.DPdebug == true) Console.WriteLine(result[0].ToString("X4") + result[1].ToString("X4"));
+                            if (!opt.Ieee754) Console.WriteLine(result[0].ToString() + result[1].ToString());
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine(ex.Message);
+                        }
+                    }
+
+                    if (opt.Mfunction == "5")
+                    {
+                        // WriteSingleCoil = 0x05,             // FC0
+                        try
+                        {
+                            bool wert = false;
+                            if (opt.DPValue == 1) wert = true;
+                            if (opt.DPValue == 0) wert = false;
+                            _modbusMaster.WriteSingleCoil(Convert.ToByte(opt.Address), (ushort)opt.Saddress, wert);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine(ex.Message);
+                        }
                     }
 
                     if (opt.Mfunction == "16")
                     {
                         // WriteMultipleRegisters = 0x10,      // FC16
-                        float fhilf = Convert.ToInt16(opt.DPValue) / 10;
-                        var tempo = ToHexString(fhilf);
-                        Console.WriteLine(tempo);
-                        var registers = tempo.ToArray();
-                        //byte[] registers = new byte[] { 0x41, 0xc0, 0x00, 0x00 };
-                     /*   registers[0] = Convert.ToByte(tempo.Substring(2, 2));
-                        registers[1] = Convert.ToByte(tempo.Substring(4, 2));
-                        registers[2] = Convert.ToByte(tempo.Substring(6, 2));
-                        registers[3] = Convert.ToByte(tempo.Substring(8, 2));
-                       */ client.WriteMultipleRegisters(opt.Address, opt.Saddress, registers); 
-                        //                        Thread.Sleep(sleepTime);
-                        //					var tempo = ToHexString(float.Parse(opt.DPValue));
-                        //					ushort[] registers = new ushort[] { 1, 2 };
-                        //                    registers[0] = Convert.ToUInt16(tempo.Substring(2, 4), 16);
-                        //                    registers[1] = Convert.ToUInt16(tempo.Substring(6, 4), 16);
-                        //                    Console.WriteLine(registers);
-                        //                    master.WriteMultipleRegisters(slaveAddress, Convert.ToUInt16(opt.Saddress), registers);
+                        int h = opt.DPValue;
+                        float hilf = (float)h;
+                        hilf = hilf / 10;
+                        var tempo = ToHexString(hilf);
+                        //Console.WriteLine(hilf);
+                        //Console.WriteLine(tempo.ToString());
+                        if (opt.DPdebug == true) Console.WriteLine(tempo.Substring(2, 8));
+                        ushort[] registers = new ushort[2] { 1, 2 };
+                        registers[0] = (ushort)Convert.ToInt16(tempo.Substring(2, 4), 16);
+                        registers[1] = (ushort)Convert.ToInt16(tempo.Substring(2 + 4, 4), 16);
+                        _modbusMaster.WriteMultipleRegisters(Convert.ToByte(opt.Address), (ushort)opt.Saddress, registers);
                     }
 
                 }
@@ -264,44 +238,33 @@ namespace ModConsole
                 {
                     Console.WriteLine(ex.Message);
                 }
-                client.Close();
+                //                client.Close();
+                _modbusMaster.Dispose();
+                _modbusMaster = null;
 
-                // IEEE754 it works
- //               var hexString = ToHexString(-10.5F);
- //               var f = FromHexString(hexString);
- //               Console.WriteLine(hexString.ToString());
- //               Console.WriteLine(f.ToString());
+                _serialPort.Close();
+                _serialPort.Dispose();
+                _serialPort = null;
 
                 return 0;
-			}
-			catch (CliParserExit)
-			{
-				// --help
-				return 0;
+            }
+            catch (CliParserExit)
+            {
+                // --help
+                return 0;
 
-			}
-			catch (Exception e)
-			{
-				// unknown options etc...
-				Console.Error.WriteLine("Fatal Error: " + e.Message);
-				return 1;
-			}
+            }
+            catch (Exception e)
+            {
+                // unknown options etc...
+                Console.Error.WriteLine("Fatal Error: " + e.Message);
+                return 1;
+            }
             string ToHexString(float f)
             {
                 var bytes = BitConverter.GetBytes(f);
                 var i = BitConverter.ToInt32(bytes, 0);
                 return "0x" + i.ToString("X8");
-            }
-            int GetBitRange(int data, int offset, int count)
-            {
-                return data << offset >> (32 - count);
-            }
-            string ConvertLinearToString(ushort data)
-            {
-                var n = GetBitRange(data, 16, 5);
-                var y = GetBitRange(data, 21, 11);
-                var value = y * Math.Pow(2, n);
-                return value.ToString();
             }
             float FromHexString(string s)
             {
@@ -309,244 +272,6 @@ namespace ModConsole
                 var bytes = BitConverter.GetBytes(i);
                 return BitConverter.ToSingle(bytes, 0);
             }
-            string ByteArrayToString(byte[] ba)
-            {
-                return BitConverter.ToString(ba).Replace("-", "");
-            }
-            byte[] StringToByteArray(String hex)
-            {
-                int NumberChars = hex.Length;
-                byte[] bytes = new byte[NumberChars / 2];
-                for (int i = 0; i < NumberChars; i += 2)
-                    bytes[i / 2] = Convert.ToByte(hex.Substring(i, 2), 16);
-                return bytes;
-            }
-            string ConvertHex(string hexString)
-            {
-                try
-                {
-                    string ascii = string.Empty;
-
-                    for (int i = 0; i < hexString.Length; i += 2)
-                    {
-                        string hs = string.Empty;
-
-                        hs = hexString.Substring(i, 2);
-                        ulong decval = Convert.ToUInt64(hs, 16);
-                        long deccc = Convert.ToInt64(hs, 16);
-                        char character = Convert.ToChar(deccc);
-                        ascii += character;
-
-                    }
-
-                    return ascii;
-                }
-                catch (Exception ex) { Console.WriteLine(ex.Message); }
-
-                return string.Empty;
-            }
         }
-    }
-/*    public static class EncodingExtensions
-    {
-        public static string GetString(this Encoding encoding, Span<byte> source)
-        {
-            //naive way using ToArray, but possible to improve when needed
-            return encoding.GetString(source.ToArray());
-        }
-    }
-*/
-}
-/*
-// Use this code inside a project created with the Visual C# > Windows Desktop > Console Application template.
-// Replace the code in Program.cs with this code.
-
-using System;
-using System.IO.Ports;
-using System.Threading;
-
-public class PortChat
-{
-    static bool _continue;
-    static SerialPort _serialPort;
-
-    public static void Main()
-    {
-        string name;
-        string message;
-        StringComparer stringComparer = StringComparer.OrdinalIgnoreCase;
-        Thread readThread = new Thread(Read);
-
-        // Create a new SerialPort object with default settings.
-        _serialPort = new SerialPort();
-
-        // Allow the user to set the appropriate properties.
-        _serialPort.PortName = SetPortName(_serialPort.PortName);
-        _serialPort.BaudRate = SetPortBaudRate(_serialPort.BaudRate);
-        _serialPort.Parity = SetPortParity(_serialPort.Parity);
-        _serialPort.DataBits = SetPortDataBits(_serialPort.DataBits);
-        _serialPort.StopBits = SetPortStopBits(_serialPort.StopBits);
-        _serialPort.Handshake = SetPortHandshake(_serialPort.Handshake);
-
-        // Set the read/write timeouts
-        _serialPort.ReadTimeout = 500;
-        _serialPort.WriteTimeout = 500;
-
-        _serialPort.Open();
-        _continue = true;
-        readThread.Start();
-
-        Console.Write("Name: ");
-        name = Console.ReadLine();
-
-        Console.WriteLine("Type QUIT to exit");
-
-        while (_continue)
-        {
-            message = Console.ReadLine();
-
-            if (stringComparer.Equals("quit", message))
-            {
-                _continue = false;
-            }
-            else
-            {
-                _serialPort.WriteLine(
-                    String.Format("<{0}>: {1}", name, message));
-            }
-        }
-
-        readThread.Join();
-        _serialPort.Close();
-    }
-
-    public static void Read()
-    {
-        while (_continue)
-        {
-            try
-            {
-                string message = _serialPort.ReadLine();
-                Console.WriteLine(message);
-            }
-            catch (TimeoutException) { }
-        }
-    }
-
-    // Display Port values and prompt user to enter a port.
-    public static string SetPortName(string defaultPortName)
-    {
-        string portName;
-
-        Console.WriteLine("Available Ports:");
-        foreach (string s in SerialPort.GetPortNames())
-        {
-            Console.WriteLine("   {0}", s);
-        }
-
-        Console.Write("Enter COM port value (Default: {0}): ", defaultPortName);
-        portName = Console.ReadLine();
-
-        if (portName == "" || !(portName.ToLower()).StartsWith("com"))
-        {
-            portName = defaultPortName;
-        }
-        return portName;
-    }
-    // Display BaudRate values and prompt user to enter a value.
-    public static int SetPortBaudRate(int defaultPortBaudRate)
-    {
-        string baudRate;
-
-        Console.Write("Baud Rate(default:{0}): ", defaultPortBaudRate);
-        baudRate = Console.ReadLine();
-
-        if (baudRate == "")
-        {
-            baudRate = defaultPortBaudRate.ToString();
-        }
-
-        return int.Parse(baudRate);
-    }
-
-    // Display PortParity values and prompt user to enter a value.
-    public static Parity SetPortParity(Parity defaultPortParity)
-    {
-        string parity;
-
-        Console.WriteLine("Available Parity options:");
-        foreach (string s in Enum.GetNames(typeof(Parity)))
-        {
-            Console.WriteLine("   {0}", s);
-        }
-
-        Console.Write("Enter Parity value (Default: {0}):", defaultPortParity.ToString(), true);
-        parity = Console.ReadLine();
-
-        if (parity == "")
-        {
-            parity = defaultPortParity.ToString();
-        }
-
-        return (Parity)Enum.Parse(typeof(Parity), parity, true);
-    }
-    // Display DataBits values and prompt user to enter a value.
-    public static int SetPortDataBits(int defaultPortDataBits)
-    {
-        string dataBits;
-
-        Console.Write("Enter DataBits value (Default: {0}): ", defaultPortDataBits);
-        dataBits = Console.ReadLine();
-
-        if (dataBits == "")
-        {
-            dataBits = defaultPortDataBits.ToString();
-        }
-
-        return int.Parse(dataBits.ToUpperInvariant());
-    }
-
-    // Display StopBits values and prompt user to enter a value.
-    public static StopBits SetPortStopBits(StopBits defaultPortStopBits)
-    {
-        string stopBits;
-
-        Console.WriteLine("Available StopBits options:");
-        foreach (string s in Enum.GetNames(typeof(StopBits)))
-        {
-            Console.WriteLine("   {0}", s);
-        }
-
-        Console.Write("Enter StopBits value (None is not supported and \n" +
-         "raises an ArgumentOutOfRangeException. \n (Default: {0}):", defaultPortStopBits.ToString());
-        stopBits = Console.ReadLine();
-
-        if (stopBits == "" )
-        {
-            stopBits = defaultPortStopBits.ToString();
-        }
-
-        return (StopBits)Enum.Parse(typeof(StopBits), stopBits, true);
-    }
-    public static Handshake SetPortHandshake(Handshake defaultPortHandshake)
-    {
-        string handshake;
-
-        Console.WriteLine("Available Handshake options:");
-        foreach (string s in Enum.GetNames(typeof(Handshake)))
-        {
-            Console.WriteLine("   {0}", s);
-        }
-
-        Console.Write("Enter Handshake value (Default: {0}):", defaultPortHandshake.ToString());
-        handshake = Console.ReadLine();
-
-        if (handshake == "")
-        {
-            handshake = defaultPortHandshake.ToString();
-        }
-
-        return (Handshake)Enum.Parse(typeof(Handshake), handshake, true);
     }
 }
-*/
